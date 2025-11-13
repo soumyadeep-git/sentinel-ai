@@ -1,0 +1,83 @@
+services:
+  # --- Infrastructure Services ---
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.24.1
+    container_name: weaviate
+    ports:
+      - "8080:8080"
+    restart: on-failure:0
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      ENABLE_MODULES: 'text2vec-google'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-google'
+      GOOGLE_APIKEY: ${GOOGLE_API_KEY}
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+
+  # --- Application Services ---
+  api:
+    build:
+      context: ./backend/api
+    container_name: api_service
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+    volumes:
+      - ./backend/api/app:/app/app
+
+  celery_worker:
+    build:
+      context: ./backend/workers
+    container_name: worker_service
+    depends_on:
+      - redis
+      - postgres
+      - weaviate
+    env_file:
+      - .env
+    volumes:
+      - ./backend/workers/app:/app/app
+    command: celery -A app.celery_app.celery worker --loglevel=info
+
+  # --- Data Ingestion Service (runs once then exits) ---
+  ingestion:
+    build:
+      context: ./backend/data_ingestion
+    container_name: ingestion_service
+    depends_on:
+      - weaviate
+    env_file:
+      - .env
+    restart: 'no'
+
+volumes:
+  postgres_data:
+  redis_data:
+  weaviate_data:
