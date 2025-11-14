@@ -1,7 +1,20 @@
-FROM node:20-alpine
+# Use an official Node.js runtime as a parent image
+FROM node:18-alpine
+
+# Set the working directory in the container
 WORKDIR /app
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+
+# Copy package.json and package-lock.json first to leverage Docker cache
+COPY package*.json ./
+
+# Install project dependencies
+RUN npm install
+
+# Copy the rest of the application's source code
 COPY . .
+
+# Make port 3000 available to the world outside this container
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+
+# Run the app's "start" script when the container launches
+CMD ["npm", "start"]
